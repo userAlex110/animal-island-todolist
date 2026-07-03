@@ -4,3 +4,7 @@ node_modules/
 .env
 .vscode/
 .idea/
+.trae/
+package.json
+package-lock.json
+test-demo.mjs
