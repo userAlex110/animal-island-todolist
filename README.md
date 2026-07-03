@@ -54,16 +54,23 @@ animal-island-todolist/
 
 ## 📦 部署
 
-项目使用 **GitHub Pages** 进行静态站点托管，推送到 `main` 分支会触发 GitHub Actions 自动部署。
+项目通过 **GitHub Pages** 托管：`https://useralex110.github.io/animal-island-todolist/`
 
-### 启用 GitHub Pages
-
-1. 进入仓库 → Settings → Pages
-2. Source 选择 **GitHub Actions**
-3. 合并此 PR 后，每次 push 到 `main` 都会自动部署
-4. 部署完成后网站地址为：`https://userAlex110.github.io/animal-island-todolist/`
+每次 push 到 `main` 分支时，GitHub Actions 自动部署。详见 `.github/workflows/deploy-pages.yml`。
 
 > GitHub Pages 部署的是静态 HTML/CSS/JS 文件，应用使用浏览器 `localStorage` 持久化用户数据，数据留在用户本地浏览器中，不会上传到服务端。
+
+## 🔧 开发流程
+
+1. 从 `main` 分支切出功能分支
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/xxx
+   ```
+2. 本地开发完毕后提交并推送
+3. 创建 PR 到 `main` 分支
+4. 合并后自动触发 GitHub Pages 部署
 
 ## 🎨 设计参考
 
