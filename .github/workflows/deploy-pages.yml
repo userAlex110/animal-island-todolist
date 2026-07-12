@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   deploy:
+    needs: test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,10 +28,34 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      # Build a clean _site/ directory so node_modules / test helpers /
+      # dotfiles never leak into the deployed artifact. The product is a
+      # pure static site: index.html + css/ + js/ + any whitelisted assets.
+      - name: Assemble deployment artifact
+        run: |
+          mkdir -p _site/css _site/js
+          cp index.html _site/
+          cp -R css/. _site/css/
+          cp -R js/. _site/js/
+          # Preserve dotfile-style assets (e.g. .well-known) only if they exist.
+          find . -maxdepth 1 -name '.*' -not -name '.' -not -name '..' \
+            -exec cp -R {} _site/ \; 2>/dev/null || true
+
+      - name: Verify artifact cleanliness
+        run: |
+          set -euo pipefail
+          if find _site -name 'package.json' -o -name 'package-lock.json' -o -name 'node_modules' -o -name 'test-*.mjs' | grep -q .; then
+            echo "ERROR: deployment artifact contains forbidden files" >&2
+            find _site -name 'package.json' -o -name 'package-lock.json' -o -name 'node_modules' -o -name 'test-*.mjs'
+            exit 1
+          fi
+          echo "Artifact contents:"
+          find _site -maxdepth 2 -type f | sort
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: .
+          path: ./_site
 
       - name: Deploy to GitHub Pages
         id: deployment

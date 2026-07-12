@@ -5,6 +5,8 @@ node_modules/
 .vscode/
 .idea/
 .trae/
-package.json
-package-lock.json
-test-demo.mjs
+.history/
+
+# CI / E2E output directories
+test-results/
+playwright-report/
