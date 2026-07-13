@@ -1,7 +1,248 @@
     let currentDate = new Date();
     const data = {};
     let isFlipping = false;
-    const STORAGE_PREFIX = "animal-todo:";
+    const STORAGE_PREFIX = "animal-todo:";          // legacy v1, only used for migration
+    const STORAGE_PREFIX_V2 = "animal-island-todolist:v2:";  // canonical from Phase 1
+    const STORAGE_VERSION_KEY = "animal-island-todolist:v2:migrated";
+
+    // ===== Phase 1: v1 → v2 localStorage migration =====
+    // One-shot. Bumps every legacy `animal-todo:YYYY-M-D` key into the v2
+    // namespace and backfills new optional todo fields (subject/estMinutes).
+    // Runs before any render() so the app sees a single coherent schema.
+    function runMigration() {
+      try {
+        if (localStorage.getItem(STORAGE_VERSION_KEY) === "1") return;
+        const oldKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(STORAGE_PREFIX)) oldKeys.push(k);
+        }
+        for (const oldKey of oldKeys) {
+          const raw = localStorage.getItem(oldKey);
+          if (raw == null) continue;
+          const newKey = STORAGE_PREFIX_V2 + oldKey.slice(STORAGE_PREFIX.length);
+          // Don't overwrite an existing v2 entry; user data wins over old copy.
+          if (localStorage.getItem(newKey) == null) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                const upgraded = parsed.map(t => ({
+                  ...t,
+                  subject: t.subject ?? null,
+                  estMinutes: t.estMinutes ?? 0,
+                }));
+                localStorage.setItem(newKey, JSON.stringify(upgraded));
+              } else {
+                localStorage.setItem(newKey, raw);
+              }
+            } catch {
+              localStorage.setItem(newKey, raw);
+            }
+          }
+          localStorage.removeItem(oldKey);
+        }
+        localStorage.setItem(STORAGE_VERSION_KEY, "1");
+      } catch (e) {
+        // Migration is best-effort. Legacy keys remain for next launch to retry.
+      }
+    }
+    runMigration();
+
+    // ===== Pomodoro state machine =====
+    // Phase 1 ships a single classic mode (25min focus). 45/10 deep mode is
+    // scheduled for Phase 2 alongside the WebAudio bell.
+    //
+    // Design notes:
+    //  - We never rely on setInterval / setTimeout for "counting". All time
+    //    math derives from `endAt - Date.now()`. The tick loop only paints.
+    //  - visibilitychange: when the page returns to foreground we recompute
+    //    the remaining seconds; if `endAt` has passed we finalize. We do NOT
+    //    proactively pause on hide — the wall clock keeps ticking even if
+    //    the browser throttles us. The freeze-and-resync semantics is
+    //    explicit and documented in plan §"Pomodoro 状态机".
+    //  - Sessions are written to localStorage on finish so the heatmap
+    //    (Phase 3) can later aggregate by day.
+    const POMODORO_MODES = {
+      classic: { focusMs: 25 * 60 * 1000, breakMs: 5 * 60 * 1000, label: '经典 25/5' },
+    };
+    let pomodoroMode = 'classic';
+    const pomodoroState = {
+      running: false,        // true while a focus/break session is active
+      kind: 'idle',          // 'idle' | 'focus' | 'shortBreak'
+      startedAt: null,       // ms timestamp when this session started
+      endAt: null,           // ms timestamp when this session will end
+      durationMs: 0,         // convenience copy of (endAt - startedAt)
+      taskId: null,          // optional todo id we're focusing on
+      uiTickHandle: null,    // setTimeout handle for the paint loop
+    };
+
+    function formatMMSS(ms) {
+      const s = Math.max(0, Math.ceil(ms / 1000));
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+
+    function startPomodoro(taskId) {
+      const mode = POMODORO_MODES[pomodoroMode];
+      const focusMs = mode.focusMs;
+      pomodoroState.running = true;
+      pomodoroState.kind = 'focus';
+      pomodoroState.startedAt = Date.now();
+      pomodoroState.endAt = pomodoroState.startedAt + focusMs;
+      pomodoroState.durationMs = focusMs;
+      pomodoroState.taskId = taskId ?? null;
+      enterFocusMode();
+      scheduleTick();
+    }
+
+    function pausePomodoro() {
+      pomodoroState.running = false;
+      if (pomodoroState.uiTickHandle != null) {
+        clearTimeout(pomodoroState.uiTickHandle);
+        pomodoroState.uiTickHandle = null;
+      }
+    }
+
+    function resetPomodoro() {
+      pausePomodoro();
+      pomodoroState.kind = 'idle';
+      pomodoroState.startedAt = null;
+      pomodoroState.endAt = null;
+      pomodoroState.durationMs = 0;
+      pomodoroState.taskId = null;
+      exitFocusMode();
+      paintPomodoro();
+    }
+
+    function finishPomodoro() {
+      // Called either when the tick loop sees endAt <= now, or when
+      // visibilitychange detects the page returned after the deadline.
+      const wasFocus = pomodoroState.kind === 'focus';
+      const session = {
+        kind: wasFocus ? 'focus' : 'shortBreak',
+        startedAt: pomodoroState.startedAt,
+        finishedAt: Date.now(),
+        completed: true,
+      };
+      persistPomodoroSession(session);
+      if (wasFocus) {
+        // Auto-transition to short break.
+        const mode = POMODORO_MODES[pomodoroMode];
+        pomodoroState.kind = 'shortBreak';
+        pomodoroState.startedAt = Date.now();
+        pomodoroState.endAt = pomodoroState.startedAt + mode.breakMs;
+        pomodoroState.durationMs = mode.breakMs;
+        pomodoroState.running = true;
+        paintPomodoro();
+        scheduleTick();
+      } else {
+        // Break ended — return to idle.
+        resetPomodoro();
+      }
+    }
+
+    function tickPomodoro() {
+      if (!pomodoroState.running) return;
+      const remaining = pomodoroState.endAt - Date.now();
+      if (remaining <= 0) {
+        finishPomodoro();
+        return;
+      }
+      paintPomodoro();
+      scheduleTick();
+    }
+
+    function scheduleTick() {
+      // Use a 250ms cadence so we paint smoothly without burning cycles.
+      // Timing source-of-truth remains (endAt - Date.now()), so cadence
+      // changes are purely cosmetic.
+      if (pomodoroState.uiTickHandle != null) clearTimeout(pomodoroState.uiTickHandle);
+      pomodoroState.uiTickHandle = setTimeout(tickPomodoro, 250);
+    }
+
+    function paintPomodoro() {
+      const ring = document.querySelector('.pomodoro-ring circle.fg');
+      const time = document.getElementById('pomodoroTime');
+      const subject = document.getElementById('pomodoroSubject');
+      if (!ring || !time) return;
+      const total = pomodoroState.durationMs || 1;
+      const remaining = pomodoroState.running ? Math.max(0, pomodoroState.endAt - Date.now()) : total;
+      const ratio = Math.max(0, Math.min(1, remaining / total));
+      // circumference = 2πr where r=54 in our SVG. Use the actual value to
+      // avoid drift if the visual ring size changes.
+      const C = 2 * Math.PI * 54;
+      ring.setAttribute('stroke-dasharray', String(C));
+      ring.setAttribute('stroke-dashoffset', String(C * (1 - ratio)));
+      time.textContent = formatMMSS(remaining);
+      if (subject) {
+        let title;
+        if (pomodoroState.kind === 'shortBreak') {
+          title = '☕ 短休息';
+        } else if (pomodoroState.taskId) {
+          title = getTodos().find(t => t.id === pomodoroState.taskId)?.title || '专注中';
+        } else if (pomodoroState.kind === 'focus') {
+          title = '自由专注';
+        } else {
+          title = '准备开始';
+        }
+        subject.textContent = title;
+      }
+      // Update entry button to reflect "running" state.
+      const entry = document.getElementById('pomodoroEntry');
+      if (entry) {
+        if (pomodoroState.running) entry.classList.add('running');
+        else entry.classList.remove('running');
+      }
+    }
+
+    function persistPomodoroSession(session) {
+      try {
+        const key = STORAGE_PREFIX_V2 + 'pomodoros:' + dateKey(currentDate);
+        const raw = localStorage.getItem(key);
+        const list = raw ? JSON.parse(raw) : [];
+        list.push(session);
+        localStorage.setItem(key, JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    function enterFocusMode() {
+      const sheet = document.getElementById('paperSheet');
+      const panel = document.getElementById('pomodoroPanel');
+      if (sheet) sheet.classList.add('is-focus-mode');
+      if (panel) panel.hidden = false;
+      paintPomodoro();
+    }
+
+    function exitFocusMode() {
+      const sheet = document.getElementById('paperSheet');
+      const panel = document.getElementById('pomodoroPanel');
+      if (sheet) sheet.classList.remove('is-focus-mode');
+      if (panel) panel.hidden = true;
+    }
+
+    function togglePomodoro() {
+      if (!pomodoroState.running && pomodoroState.kind === 'idle') {
+        startPomodoro(null);
+      } else if (pomodoroState.running) {
+        pausePomodoro();
+      } else {
+        // Was paused mid-session — resume with same endAt.
+        pomodoroState.running = true;
+        scheduleTick();
+        paintPomodoro();
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!pomodoroState.running) return;
+      if (pomodoroState.endAt != null && Date.now() >= pomodoroState.endAt) {
+        finishPomodoro();
+      } else {
+        paintPomodoro();
+      }
+    });
 
     // 生成日期 key，格式 2026-7-2
     function dateKey(d) {
@@ -21,22 +262,21 @@
         && a.getDate() === b.getDate();
     }
 
-    // ===== Task 2: localStorage 持久化 =====
-    // 保存当前日期的 todos 到 localStorage，key 格式 animal-todo:2026-7-2
+    // ===== Task 2: localStorage 持久化 (v2 namespace) =====
     function save() {
       try {
         const key = dateKey(currentDate);
         const todos = data[key] || [];
-        localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(todos));
+        localStorage.setItem(STORAGE_PREFIX_V2 + key, JSON.stringify(todos));
       } catch (e) {
         // localStorage 可能不可用或已满，静默失败
       }
     }
 
-    // 从 localStorage 读取指定 dateKey 的 todos
+    // 从 localStorage 读取指定 dateKey 的 todos (v2 namespace)
     function load(dateKeyStr) {
       try {
-        const raw = localStorage.getItem(STORAGE_PREFIX + dateKeyStr);
+        const raw = localStorage.getItem(STORAGE_PREFIX_V2 + dateKeyStr);
         if (raw !== null) return JSON.parse(raw);
       } catch (e) {}
       return null;
@@ -52,9 +292,9 @@
         } else if (isSameDay(currentDate, new Date())) {
           // 仅今天注入默认示例数据
           data[key] = [
-            { id: Date.now() + 1, title: "去博物馆看化石展", note: "记得带上小铲子，说不定能挖到新的化石碎片。\n拍照留念一下~", done: false, expanded: true },
-            { id: Date.now() + 2, title: "给花园浇水", note: "黑色三色堇今天应该开了，检查一下杂交进度。", done: true, expanded: false },
-            { id: Date.now() + 3, title: "拜访小动物的岛", note: "带点水果当礼物，看看有没有新的 DIY 图纸。", done: false, expanded: false }
+            { id: Date.now() + 1, title: "去博物馆看化石展", note: "记得带上小铲子，说不定能挖到新的化石碎片。\n拍照留念一下~", done: false, expanded: true, subject: null, estMinutes: 0 },
+            { id: Date.now() + 2, title: "给花园浇水", note: "黑色三色堇今天应该开了，检查一下杂交进度。", done: true, expanded: false, subject: null, estMinutes: 0 },
+            { id: Date.now() + 3, title: "拜访小动物的岛", note: "带点水果当礼物，看看有没有新的 DIY 图纸。", done: false, expanded: false, subject: null, estMinutes: 0 }
           ];
         } else {
           data[key] = [];
@@ -88,6 +328,7 @@
         `;
         updateProgress();
         updateBackTodayBtn();
+        paintPomodoro();
         return;
       }
 
@@ -102,6 +343,7 @@
               <svg viewBox="0 0 24 24"><polyline points="5 12 10 17 19 6"></polyline></svg>
             </div>
             <input type="text" class="todo-title" value="${escapeHtml(todo.title)}" placeholder="写个大标题…" oninput="updateTitle(${todo.id}, this.value)" onclick="event.stopPropagation()">
+            <button class="pomo-mini-btn" onclick="event.stopPropagation(); startPomodoro(${todo.id})" aria-label="开始 25 分钟专注" title="开始 25 分钟专注">🍅</button>
             <span class="expand-hint">展开笔记</span>
             <button class="delete-icon" onclick="event.stopPropagation(); confirmDelete(${todo.id})" aria-label="删除" title="删除">×</button>
           </div>
@@ -114,6 +356,7 @@
 
       updateProgress();
       updateBackTodayBtn();
+      paintPomodoro();
     }
 
     // 进度条更新：独立函数，不依赖 render()
@@ -142,7 +385,9 @@
         title: "",
         note: "",
         done: false,
-        expanded: true
+        expanded: true,
+        subject: null,
+        estMinutes: 0,
       });
       save();
       render();
