@@ -254,9 +254,93 @@
     //  - Sessions are written to localStorage on finish so the heatmap
     //    (Phase 3) can later aggregate by day.
     const POMODORO_MODES = {
-      classic: { focusMs: 25 * 60 * 1000, breakMs: 5 * 60 * 1000, label: '经典 25/5' },
+      classic: { focusMs: 25 * 60 * 1000, breakMs: 5 * 60 * 1000,  label: '经典 25/5' },
+      deep:    { focusMs: 45 * 60 * 1000, breakMs: 10 * 60 * 1000, label: '深度 45/10' },
     };
     let pomodoroMode = 'classic';
+
+    // ===== WebAudio bell (Phase 2) =====
+    // Browsers block AudioContext.resume() until a user gesture. The unlock()
+    // call wires the first click/tap/keydown on the page to resume the
+    // context — afterwards playBell(kind) can run from any code path,
+    // including finishPomodoro() triggered by visibilitychange.
+    let audioCtx = null;
+    function ensureAudio() {
+      if (!audioCtx) {
+        try {
+          const Ctor = window.AudioContext || window.webkitAudioContext;
+          if (Ctor) audioCtx = new Ctor();
+        } catch (e) {}
+      }
+      return audioCtx;
+    }
+    function unlockAudio() {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      // Play a tiny silent blip to fully unlock on iOS Safari, which
+      // sometimes requires an actual sound-producing tick to enable audio.
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.01);
+      } catch (e) {}
+    }
+    // First gesture on the page unlocks audio.
+    function _firstGestureUnlock() {
+      unlockAudio();
+      document.removeEventListener('click', _firstGestureUnlock, true);
+      document.removeEventListener('keydown', _firstGestureUnlock, true);
+      document.removeEventListener('touchstart', _firstGestureUnlock, true);
+    }
+    document.addEventListener('click', _firstGestureUnlock, true);
+    document.addEventListener('keydown', _firstGestureUnlock, true);
+    document.addEventListener('touchstart', _firstGestureUnlock, true);
+
+    // Single tone with quick attack/decay envelope to avoid the
+    // characteristic OscillatorNode "click" artifact.
+    function playTone(freq, startOffset, durationMs, volume) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const now = ctx.currentTime + startOffset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + durationMs / 1000 + 0.02);
+    }
+    function playBell(kind) {
+      // focus ended → two-tone "ding-ding"
+      // break ended → single-tone "ding"
+      if (kind === 'focusEnd') {
+        playTone(880, 0,      220, 0.35);   // A5
+        playTone(1318, 0.18,  280, 0.30);   // E6
+      } else if (kind === 'breakEnd') {
+        playTone(660, 0,      260, 0.32);   // E5
+      }
+    }
+
+    function setPomodoroMode(mode) {
+      if (!POMODORO_MODES[mode]) return;
+      pomodoroMode = mode;
+      // Always reset on mode change — never silently re-map an in-flight
+      // 25min timer to a 45min window; that would let someone re-enter
+      // focus at 24min and skip to "deep mode" credit.
+      if (pomodoroState.kind !== 'idle') resetPomodoro();
+      paintPomodoro();
+      // Reflect on segmented control (if present in DOM).
+      document.querySelectorAll('.mode-toggle [data-mode]').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+    }
     const pomodoroState = {
       running: false,        // true while a focus/break session is active
       kind: 'idle',          // 'idle' | 'focus' | 'shortBreak'
@@ -328,8 +412,10 @@
         pomodoroState.running = true;
         paintPomodoro();
         scheduleTick();
+        playBell('focusEnd');  // 🔔 ding-ding → "专注结束，开始休息"
       } else {
         // Break ended — return to idle.
+        playBell('breakEnd');  // 🔔 ding     → "休息结束，继续干活"
         resetPomodoro();
       }
     }
@@ -358,7 +444,11 @@
       const time = document.getElementById('pomodoroTime');
       const subject = document.getElementById('pomodoroSubject');
       if (!ring || !time) return;
-      const total = pomodoroState.durationMs || 1;
+      const mode = POMODORO_MODES[pomodoroMode];
+      // In idle, paint the full focus duration of the current mode so the
+      // entry button / panel always advertises the active mode.
+      const total = pomodoroState.durationMs
+        || (pomodoroState.kind === 'shortBreak' ? mode.breakMs : mode.focusMs);
       const remaining = pomodoroState.running ? Math.max(0, pomodoroState.endAt - Date.now()) : total;
       const ratio = Math.max(0, Math.min(1, remaining / total));
       // circumference = 2πr where r=54 in our SVG. Use the actual value to
@@ -370,21 +460,23 @@
       if (subject) {
         let title;
         if (pomodoroState.kind === 'shortBreak') {
-          title = '☕ 短休息';
+          const breakMin = Math.round(mode.breakMs / 60000);
+          title = `☕ ${breakMin} 分钟休息`;
         } else if (pomodoroState.taskId) {
           title = getTodos().find(t => t.id === pomodoroState.taskId)?.title || '专注中';
         } else if (pomodoroState.kind === 'focus') {
           title = '自由专注';
         } else {
-          title = '准备开始';
+          title = `准备开始 · ${mode.label}`;
         }
         subject.textContent = title;
       }
-      // Update entry button to reflect "running" state.
+      // Update entry button to reflect current mode + "running" state.
       const entry = document.getElementById('pomodoroEntry');
       if (entry) {
-        if (pomodoroState.running) entry.classList.add('running');
-        else entry.classList.remove('running');
+        const focusMin = Math.round(mode.focusMs / 60000);
+        entry.textContent = `🍅 ${focusMin}:00`;
+        entry.classList.toggle('running', pomodoroState.running);
       }
     }
 
@@ -538,7 +630,7 @@
               <svg viewBox="0 0 24 24"><polyline points="5 12 10 17 19 6"></polyline></svg>
             </div>
             <input type="text" class="todo-title" value="${escapeHtml(todo.title)}" placeholder="写个大标题…" oninput="updateTitle(${todo.id}, this.value)" onclick="event.stopPropagation()">
-            <button class="pomo-mini-btn" onclick="event.stopPropagation(); startPomodoro(${todo.id})" aria-label="开始 25 分钟专注" title="开始 25 分钟专注">🍅</button>
+            <button class="pomo-mini-btn" onclick="event.stopPropagation(); startPomodoro(${todo.id})" aria-label="开始专注" title="开始专注">🍅</button>
             <span class="expand-hint">展开笔记</span>
             <button class="delete-icon" onclick="event.stopPropagation(); confirmDelete(${todo.id})" aria-label="删除" title="删除">×</button>
           </div>
