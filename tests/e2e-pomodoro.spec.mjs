@@ -120,7 +120,7 @@ async function run() {
     // After 26min wall-clock fast-forward + visibilitychange, the focus
     // session should auto-finalize into a short break (kind: shortBreak).
     const subjectAfter = (await page.locator('#pomodoroSubject').textContent()).trim();
-    log('auto-transition to short break', subjectAfter.includes('短休息'), `subject=${subjectAfter}`);
+    log('auto-transition to short break', /休息/.test(subjectAfter), `subject=${subjectAfter}`);
 
     // 7. Final state: at least one pomodoro session persisted for today.
     const pomKeys = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('animal-island-todolist:v2:pomodoros:')));

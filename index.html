@@ -92,6 +92,10 @@
              (which hides the day-view content) rather than overlay-positioning
              a separate element. Keeps the 手账纸 metaphor intact. -->
         <section id="pomodoroPanel" class="pomodoro-panel" hidden aria-label="番茄钟专注面板">
+          <div class="mode-toggle" role="radiogroup" aria-label="番茄钟模式">
+            <button data-mode="classic" class="mode-segment active" onclick="setPomodoroMode('classic')" role="radio" aria-checked="true">经典 25/5</button>
+            <button data-mode="deep" class="mode-segment" onclick="setPomodoroMode('deep')" role="radio" aria-checked="false">深度 45/10</button>
+          </div>
           <span class="focus-emoji" aria-hidden="true">🍅</span>
           <div class="focus-ring-wrap">
             <svg class="pomodoro-ring" viewBox="0 0 120 120" aria-hidden="true">
@@ -103,6 +107,7 @@
           <p class="focus-subject" id="pomodoroSubject">自由专注</p>
           <div class="focus-actions">
             <button class="focus-toggle-btn" id="focusToggleBtn" onclick="togglePomodoro()" type="button">暂停</button>
+            <button class="focus-bell-btn" id="focusBellBtn" onclick="unlockAudio(); playBell('focusEnd');" type="button" title="试听专注结束铃声">🔔</button>
             <button class="focus-giveup-btn" id="focusGiveupBtn" onclick="resetPomodoro()" type="button">结束</button>
           </div>
         </section>
