@@ -332,6 +332,177 @@
       box-shadow: 0 1px 0 0 #b3e8e3;
     }
 
+    /* ===== Phase 1: Pomodoro entry button ===== */
+    .pomo-entry-btn {
+      font-family: Nunito, "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: #fff;
+      background: var(--primary);
+      border: none;
+      border-radius: var(--radius-pill);
+      padding: 8px 14px;
+      cursor: pointer;
+      box-shadow: 0 5px 0 0 var(--primary-active);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+      flex-shrink: 0;
+      letter-spacing: 0.5px;
+    }
+    .pomo-entry-btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 0 0 var(--primary-active);
+    }
+    .pomo-entry-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 0 var(--primary-active);
+    }
+    .pomo-entry-btn.running {
+      background: var(--warning);
+      box-shadow: 0 5px 0 0 #c79d0f;
+    }
+    .pomo-entry-btn.running:hover {
+      background: #ffd035;
+    }
+
+    /* Phase 1: tiny per-todo pomodoro launch button next to the title input */
+    .pomo-mini-btn {
+      background: transparent;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 2px 4px;
+      margin-left: 4px;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+      flex-shrink: 0;
+    }
+    .todo-card:hover .pomo-mini-btn,
+    .todo-card.expanded .pomo-mini-btn {
+      opacity: 0.7;
+    }
+    .pomo-mini-btn:hover {
+      opacity: 1 !important;
+      transform: scale(1.15);
+    }
+
+    /* ===== Phase 1: focus mode =====
+       Adds a tinted overlay over the paper-sheet content and exposes the
+       pomodoro-panel which lives in normal flow as a sibling — when
+       is-focus-mode is on we hide the rest of the page chrome. */
+    .paper-sheet.is-focus-mode .perforation,
+    .paper-sheet.is-focus-mode .swipe-hint,
+    .paper-sheet.is-focus-mode .wave-divider,
+    .paper-sheet.is-focus-mode .todo-list,
+    .paper-sheet.is-focus-mode .progress-bar-wrap,
+    .paper-sheet.is-focus-mode .footer-illustration {
+      display: none !important;
+    }
+    .paper-sheet.is-focus-mode .date-bar {
+      opacity: 0.4;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .paper-sheet.is-focus-mode {
+      background: linear-gradient(180deg, #f6fbf9 0%, var(--paper) 60%, var(--paper-secondary) 100%);
+    }
+    .pomodoro-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 36px 24px 28px;
+      min-height: 320px;
+      text-align: center;
+      animation: focusFadeIn 0.35s ease both;
+    }
+    @keyframes focusFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .pomodoro-ring {
+      width: 200px;
+      height: 200px;
+      transform: rotate(-90deg);
+    }
+    .pomodoro-ring circle {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+    }
+    .pomodoro-ring .bg {
+      stroke: var(--primary-bg);
+    }
+    .pomodoro-ring .fg {
+      stroke: var(--primary);
+      transition: stroke-dashoffset 0.25s linear;
+    }
+    .focus-emoji {
+      font-size: 30px;
+      animation: float 4s ease-in-out infinite;
+    }
+    .focus-time {
+      font-family: Nunito, sans-serif;
+      font-weight: 900;
+      font-size: 44px;
+      color: var(--ink);
+      letter-spacing: 2px;
+      margin-top: -110px;        /* visually center the digits over the ring */
+      margin-bottom: 80px;       /* push subject text below the ring */
+      pointer-events: none;
+    }
+    .focus-subject {
+      font-family: "Noto Sans SC", sans-serif;
+      font-weight: 500;
+      font-size: 15px;
+      color: var(--ink-light);
+      max-width: 320px;
+      margin: 0;
+      min-height: 1.5em;
+    }
+    .focus-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .focus-toggle-btn,
+    .focus-giveup-btn {
+      font-family: Nunito, "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      border-radius: var(--radius-pill);
+      padding: 10px 22px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+    }
+    .focus-toggle-btn {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 5px 0 0 var(--primary-active);
+    }
+    .focus-toggle-btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+    .focus-toggle-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 0 var(--primary-active);
+    }
+    .focus-giveup-btn {
+      background: transparent;
+      color: var(--ink-light);
+      border: 2px solid var(--border-light);
+    }
+    .focus-giveup-btn:hover {
+      background: var(--paper-secondary);
+      transform: translateY(-1px);
+    }
+    .focus-giveup-btn:active {
+      transform: translateY(2px);
+    }
+
     .swipe-hint {
       text-align: center;
       font-size: 12px;
