@@ -48,6 +48,197 @@
     }
     runMigration();
 
+    // ===== Phase 3: stats (heatmap + countdown + star stamp) =====
+    // We render the heatmap for the past 53×7 = 371 days, bucketing each
+    // day into 0..4 by completed-focus-session count. The same key the
+    // pomodoro state machine writes to (`v2:pomodoros:YYYY-M-D`) is the
+    // single source of truth — nothing else to wire up.
+    const HEATMAP_DAYS = 371;
+    const HEATMAP_COLS = 53;
+    const HEATMAP_ROWS = 7;
+    const HEATMAP_BUCKETS = [0, 1, 2, 4, 8];  // 0 → 0, 1 → 1, 2-3 → 2, 4-7 → 3, 8+ → 4
+
+    function bucketToLevel(n) {
+      let level = 0;
+      for (let i = 0; i < HEATMAP_BUCKETS.length; i++) {
+        if (n >= HEATMAP_BUCKETS[i]) level = i;
+      }
+      return level;
+    }
+
+    function getAllPomodoros() {
+      // Returns Map<dateKeyString, focusCount> aggregating every
+      // `v2:pomodoros:YYYY-M-D` key. Skips non-JSON / corrupt entries.
+      const out = new Map();
+      try {
+        const prefix = STORAGE_PREFIX_V2 + 'pomodoros:';
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || !k.startsWith(prefix)) continue;
+          const dateKey = k.slice(prefix.length);
+          const raw = localStorage.getItem(k);
+          if (!raw) continue;
+          const list = JSON.parse(raw);
+          if (!Array.isArray(list)) continue;
+          let count = 0;
+          for (const s of list) {
+            if (s && s.kind === 'focus' && s.completed) count++;
+          }
+          if (count > 0) out.set(dateKey, count);
+        }
+      } catch (e) {}
+      return out;
+    }
+
+    function renderHeatmap() {
+      const wrap = document.getElementById('heatmap');
+      if (!wrap) return;
+      const data = getAllPomodoros();
+      // 53×7 grid ending on today's column. Each column is a week.
+      // We anchor by the most recent Sunday so the rightmost column ends
+      // on today. Cells beyond today are flagged .future (rendered muted).
+      const today = new Date();
+      const todayMs = today.getTime();
+      const todayDow = today.getDay();          // 0=Sun..6=Sat
+      const endOfWeekMs = todayMs - todayDow * 86400000;
+      const cells = [];
+      for (let col = HEATMAP_COLS - 1; col >= 0; col--) {
+        for (let row = 0; row < HEATMAP_ROWS; row++) {
+          const offsetDays = (HEATMAP_COLS - 1 - col) * 7 + (row - todayDow);
+          const cellDate = new Date(endOfWeekMs + offsetDays * 86400000);
+          const k = dateKey(cellDate);
+          const count = data.get(k) || 0;
+          const level = count > 0 ? bucketToLevel(count) : 0;
+          const isFuture = cellDate.getTime() > todayMs;
+          cells.push({ col, row, k, level, isFuture, count });
+        }
+      }
+      wrap.innerHTML = cells.map(c => {
+        const cls = `heatmap-cell heat-${c.level}${c.isFuture ? ' future' : ''}`;
+        const title = c.isFuture ? '' : `${c.k} · ${c.count} 个番茄`;
+        return `<div class="${cls}" data-date="${c.k}" data-level="${c.level}" title="${title}"></div>`;
+      }).join('');
+    }
+
+    function getSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_PREFIX_V2 + 'settings');
+        if (raw) return JSON.parse(raw) || {};
+      } catch (e) {}
+      return {};
+    }
+
+    function saveSettings(patch) {
+      const next = Object.assign({}, getSettings(), patch);
+      try {
+        localStorage.setItem(STORAGE_PREFIX_V2 + 'settings', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    }
+
+    function getExamDate() {
+      const s = getSettings();
+      if (!s.examDate) return null;
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.examDate);
+      if (!m) return null;
+      return new Date(+m[1], +m[2] - 1, +m[3]);
+    }
+
+    function daysUntil(target) {
+      const a = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+      const b = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+      return Math.round((a - b) / 86400000);
+    }
+
+    function renderCountdown() {
+      const valueEl = document.getElementById('countdownValue');
+      const suffixEl = document.getElementById('countdownSuffix');
+      if (!valueEl || !suffixEl) return;
+      const exam = getExamDate();
+      if (!exam) {
+        valueEl.textContent = '—';
+        suffixEl.textContent = '点击右侧设置考日';
+        return;
+      }
+      const days = daysUntil(exam);
+      if (days > 0) {
+        valueEl.textContent = String(days);
+        suffixEl.textContent = `天 · ${exam.getFullYear()}-${exam.getMonth() + 1}-${exam.getDate()}`;
+      } else if (days === 0) {
+        valueEl.textContent = '0';
+        suffixEl.textContent = '就是今天 · 加油！';
+      } else {
+        valueEl.textContent = '+' + String(-days);
+        suffixEl.textContent = '天 · 考试已过，继续记录当下';
+      }
+    }
+
+    function openExamModal() {
+      const backdrop = document.getElementById('examModalBackdrop');
+      const input = document.getElementById('examDateInput');
+      if (!backdrop || !input) return;
+      const exam = getExamDate();
+      if (exam) {
+        const y = exam.getFullYear();
+        const m = String(exam.getMonth() + 1).padStart(2, '0');
+        const d = String(exam.getDate()).padStart(2, '0');
+        input.value = `${y}-${m}-${d}`;
+      } else {
+        const def = new Date();
+        def.setMonth(def.getMonth() + 6);
+        const y = def.getFullYear();
+        const m = String(def.getMonth() + 1).padStart(2, '0');
+        const d = String(def.getDate()).padStart(2, '0');
+        input.value = `${y}-${m}-${d}`;
+      }
+      backdrop.hidden = false;
+    }
+
+    function closeExamModal(ev) {
+      if (ev && ev.target !== ev.currentTarget) return;
+      const backdrop = document.getElementById('examModalBackdrop');
+      if (backdrop) backdrop.hidden = true;
+    }
+
+    function saveExamDate() {
+      const input = document.getElementById('examDateInput');
+      if (!input || !input.value) return;
+      saveSettings({ examDate: input.value });
+      closeExamModal();
+      renderCountdown();
+    }
+
+    function clearExamDate() {
+      saveSettings({ examDate: null });
+      closeExamModal();
+      renderCountdown();
+    }
+    document.getElementById('examModalClear').addEventListener('click', clearExamDate);
+
+    function applyStarStamp() {
+      // 今日之星: today is in view, every todo is done, and at least one
+      // pomodoro was completed today. Shows a gold star next to the date
+      // badge (distinct from the per-todo red .stamp).
+      const star = document.getElementById('starStamp');
+      if (!star) return;
+      const isToday = isSameDay(currentDate, new Date());
+      if (!isToday) { star.hidden = true; return; }
+      const todos = getTodos();
+      const allDone = todos.length > 0 && todos.every(t => t.done);
+      if (!allDone) { star.hidden = true; return; }
+      const key = STORAGE_PREFIX_V2 + 'pomodoros:' + dateKey(currentDate);
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) {}
+      const focusCount = list.filter(s => s && s.kind === 'focus' && s.completed).length;
+      star.hidden = focusCount === 0;
+    }
+
+    function renderStats() {
+      renderHeatmap();
+      renderCountdown();
+      applyStarStamp();
+    }
+
     // ===== Pomodoro state machine =====
     // Phase 1 ships a single classic mode (25min focus). 45/10 deep mode is
     // scheduled for Phase 2 alongside the WebAudio bell.
@@ -126,6 +317,7 @@
         completed: true,
       };
       persistPomodoroSession(session);
+      renderStats();   // a finished focus session bumps today's heatmap cell
       if (wasFocus) {
         // Auto-transition to short break.
         const mode = POMODORO_MODES[pomodoroMode];
@@ -331,6 +523,7 @@
         updateProgress();
         updateBackTodayBtn();
         paintPomodoro();
+        applyStarStamp();
         return;
       }
 
@@ -359,6 +552,7 @@
       updateProgress();
       updateBackTodayBtn();
       paintPomodoro();
+      applyStarStamp();
     }
 
     // 进度条更新：独立函数，不依赖 render()
@@ -416,6 +610,7 @@
       if (card) card.classList.toggle("completed", todo.done);
       updateProgress();
       save();
+      applyStarStamp();
     }
 
     // 更新标题：只更新数据 + 保存，不调用 render()
@@ -556,3 +751,4 @@
 
     // 初始渲染
     render();
+    renderStats();
