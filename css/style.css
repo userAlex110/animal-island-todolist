@@ -709,6 +709,140 @@
       transform: translateY(1px);
     }
 
+    /* Phase 5: milestone roadmap (基础→强化→冲刺) */
+    .milestone-bar {
+      padding: 4px 24px 14px;
+      margin-top: -8px;
+    }
+    .milestone-label {
+      font-family: Nunito, "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--ink-light);
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .milestone-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      counter-reset: milestone;
+    }
+    .milestone-card {
+      position: relative;
+      background: var(--paper-secondary);
+      border: 2px dashed var(--border-light);
+      border-radius: var(--radius);
+      padding: 12px 8px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      color: var(--ink-light);
+      opacity: 0.7;
+      transition: opacity 0.3s ease, border-color 0.3s ease, transform 0.2s ease;
+    }
+    .milestone-card.reached {
+      background: var(--primary-bg);
+      border-style: solid;
+      border-color: var(--accent, var(--primary));
+      color: var(--ink);
+      opacity: 1;
+    }
+    .milestone-card.locked {
+      filter: saturate(0.4);
+    }
+    .milestone-card.current {
+      animation: milestoneWobble 2.4s ease-in-out infinite;
+      box-shadow: 0 6px 0 0 var(--paper-secondary),
+                  0 0 0 3px var(--accent, var(--primary)) inset;
+    }
+    @keyframes milestoneWobble {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50%      { transform: translateY(-2px) rotate(-0.6deg); }
+    }
+    .milestone-flag {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 2.5px solid var(--accent, var(--ink-light));
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      box-shadow: 0 3px 0 0 var(--border-light);
+    }
+    .milestone-card.reached .milestone-flag {
+      background: var(--accent, var(--primary));
+      color: #fff;
+    }
+    .milestone-card.reached .milestone-flag {
+      box-shadow: 0 3px 0 0 var(--ink-light);
+    }
+    .milestone-name {
+      font-family: Nunito, "Noto Sans SC", sans-serif;
+      font-weight: 900;
+      font-size: 14px;
+    }
+    .milestone-meta {
+      font-size: 11px;
+      color: var(--ink-light);
+    }
+    .milestone-card.reached .milestone-meta {
+      color: var(--ink);
+    }
+    .milestone-threshold {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--paper);
+      border-radius: var(--radius-pill);
+      border: 1.5px solid var(--border-light);
+      font-weight: 700;
+    }
+    .milestone-hint-row {
+      font-size: 11px;
+      color: var(--ink-light);
+      line-height: 1.4;
+      max-width: 160px;
+    }
+    .milestone-card.reached .milestone-hint-row {
+      color: var(--ink);
+    }
+    .milestone-pin {
+      position: absolute;
+      top: -10px;
+      right: -6px;
+      background: var(--warning);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+      animation: pinPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pinPulse {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.08); }
+    }
+    .milestone-hint {
+      margin: 10px 0 0;
+      padding: 8px 12px;
+      background: var(--paper-secondary);
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--ink);
+      border-left: 3px solid var(--primary);
+    }
+    .milestone-card.reached + .milestone-card.reached .milestone-flag {
+      box-shadow: 0 3px 0 0 var(--accent, var(--ink-light));
+    }
+
     /* Phase 3: gold star stamp (per-day). Distinct from per-todo .stamp. */
     .star-stamp {
       display: inline-flex;
