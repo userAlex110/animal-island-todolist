@@ -210,6 +210,7 @@
       const sheet = document.getElementById('paperSheet');
       const panel = document.getElementById('pomodoroPanel');
       if (sheet) sheet.classList.add('is-focus-mode');
+      document.body.classList.add('is-focus-mode');
       if (panel) panel.hidden = false;
       paintPomodoro();
     }
@@ -218,6 +219,7 @@
       const sheet = document.getElementById('paperSheet');
       const panel = document.getElementById('pomodoroPanel');
       if (sheet) sheet.classList.remove('is-focus-mode');
+      document.body.classList.remove('is-focus-mode');
       if (panel) panel.hidden = true;
     }
 

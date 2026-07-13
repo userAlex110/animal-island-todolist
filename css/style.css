@@ -387,33 +387,40 @@
     }
 
     /* ===== Phase 1: focus mode =====
-       Adds a tinted overlay over the paper-sheet content and exposes the
-       pomodoro-panel which lives in normal flow as a sibling — when
-       is-focus-mode is on we hide the rest of the page chrome. */
+       When .is-focus-mode is on, the day-view content is hidden and the
+       pomodoro panel (which lives inside paper-sheet) takes over. We
+       deliberately avoid a fullscreen overlay so the 手账纸 metaphor
+       (paper width, paper texture, paper shadow) stays intact. */
     .paper-sheet.is-focus-mode .perforation,
     .paper-sheet.is-focus-mode .swipe-hint,
     .paper-sheet.is-focus-mode .wave-divider,
     .paper-sheet.is-focus-mode .todo-list,
     .paper-sheet.is-focus-mode .progress-bar-wrap,
-    .paper-sheet.is-focus-mode .footer-illustration {
+    .paper-sheet.is-focus-mode .footer-illustration,
+    .paper-sheet.is-focus-mode .date-nav,
+    .paper-sheet.is-focus-mode .back-today-btn,
+    .paper-sheet.is-focus-mode #progressText,
+    .paper-sheet.is-focus-mode #progressPercent,
+    .paper-sheet.is-focus-mode .progress-bar {
       display: none !important;
     }
     .paper-sheet.is-focus-mode .date-bar {
-      opacity: 0.4;
-      pointer-events: none;
-      transition: opacity 0.25s ease;
+      display: none !important;
     }
     .paper-sheet.is-focus-mode {
       background: linear-gradient(180deg, #f6fbf9 0%, var(--paper) 60%, var(--paper-secondary) 100%);
+    }
+    body.is-focus-mode .floating-action {
+      display: none !important;
     }
     .pomodoro-panel {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      padding: 36px 24px 28px;
-      min-height: 320px;
+      gap: 24px;
+      padding: 48px 24px 36px;
+      min-height: 460px;
       text-align: center;
       animation: focusFadeIn 0.35s ease both;
     }
@@ -421,10 +428,26 @@
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    .focus-emoji {
+      font-size: 38px;
+      line-height: 1;
+      animation: float 4s ease-in-out infinite;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.06));
+    }
+    .focus-ring-wrap {
+      position: relative;
+      width: 240px;
+      height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
     .pomodoro-ring {
-      width: 200px;
-      height: 200px;
+      width: 240px;
+      height: 240px;
       transform: rotate(-90deg);
+      position: absolute;
+      inset: 0;
     }
     .pomodoro-ring circle {
       fill: none;
@@ -438,19 +461,15 @@
       stroke: var(--primary);
       transition: stroke-dashoffset 0.25s linear;
     }
-    .focus-emoji {
-      font-size: 30px;
-      animation: float 4s ease-in-out infinite;
-    }
     .focus-time {
+      position: relative;
+      z-index: 1;
       font-family: Nunito, sans-serif;
       font-weight: 900;
-      font-size: 44px;
+      font-size: 52px;
       color: var(--ink);
-      letter-spacing: 2px;
-      margin-top: -110px;        /* visually center the digits over the ring */
-      margin-bottom: 80px;       /* push subject text below the ring */
-      pointer-events: none;
+      letter-spacing: 3px;
+      line-height: 1;
     }
     .focus-subject {
       font-family: "Noto Sans SC", sans-serif;
@@ -464,7 +483,7 @@
     .focus-actions {
       display: flex;
       gap: 12px;
-      margin-top: 16px;
+      margin-top: 8px;
     }
     .focus-toggle-btn,
     .focus-giveup-btn {
