@@ -446,7 +446,80 @@
     function renderStats() {
       renderHeatmap();
       renderCountdown();
+      renderMilestones();
       applyStarStamp();
+    }
+
+    // ===== Phase 5: milestone roadmap =====
+    // Three preset stages a typical 考研 (postgrad exam) candidate walks
+    // through. Thresholds are tuned for ~6-month prep + ~2 sessions/day:
+    //   🌱 基础期  0..49        build vocabulary, outline chapters
+    //   🔥 强化期 50..199       past papers, targeted drills
+    //   🚀 冲刺期 200..∞        mock exams, edge-case speedwork
+    // Total focus count is summed across EVERY `v2:pomodoros:YYYY-M-D` key.
+    // We compute it from the same `getAllPomodoros` map used for the
+    // heatmap — single source of truth.
+    //
+    // UI: a horizontal "island trail" — three flag cards joined by a path
+    // bar whose fill grows with progress. The card for the *current* stage
+    // gets a wobble animation + "你在 🟢" pin. Locked cards render muted.
+    const MILESTONES = [
+      { id: 'foundation', emoji: '🌱', name: '基础期',   color: '--success',  threshold: 0,   hint: '搭框架 + 过教材，慢慢来' },
+      { id: 'reinforce',  emoji: '🔥', name: '强化期',   color: '--warning',  threshold: 50,  hint: '真题 + 错题，开始见真章' },
+      { id: 'sprint',     emoji: '🚀', name: '冲刺期',   color: '--primary',  threshold: 200, hint: '模考 + 押题，临门一脚' },
+    ];
+
+    function getTotalFocuses() {
+      // Sum across every date — independent of which day is in view, so
+      // pomo sessions written on past days still push you up the road.
+      let total = 0;
+      const data = getAllPomodoros();
+      data.forEach(n => { total += n; });
+      return total;
+    }
+
+    function getCurrentMilestone(total) {
+      // Walks from the highest threshold down so a user with 300 sessions
+      // lands on the last milestone, not the first.
+      for (let i = MILESTONES.length - 1; i >= 0; i--) {
+        if (total >= MILESTONES[i].threshold) return i;
+      }
+      return 0;
+    }
+
+    function renderMilestones() {
+      const list = document.getElementById('milestoneList');
+      const hint = document.getElementById('milestoneHint');
+      if (!list || !hint) return;
+      const total = getTotalFocuses();
+      const currentIdx = getCurrentMilestone(total);
+      const nextIdx = currentIdx + 1 < MILESTONES.length ? currentIdx + 1 : null;
+
+      list.innerHTML = MILESTONES.map((m, i) => {
+        const reached = i <= currentIdx;
+        const isCurrent = i === currentIdx;
+        const pct = reached ? 100 : 0;
+        return `
+          <li class="milestone-card ${reached ? 'reached' : 'locked'} ${isCurrent ? 'current' : ''}" data-id="${m.id}">
+            <div class="milestone-flag" style="--accent: var(${m.color})">${m.emoji}</div>
+            <div class="milestone-name">${escapeHtml(m.name)}</div>
+            <div class="milestone-meta">
+              <span class="milestone-threshold">${m.threshold === 0 ? '0' : m.threshold}+ 🍅</span>
+            </div>
+            <div class="milestone-hint-row">${escapeHtml(m.hint)}</div>
+            ${isCurrent ? '<div class="milestone-pin" aria-hidden="true">你在 🟢</div>' : ''}
+            ${i < MILESTONES.length - 1 ? '<span class="milestone-path" aria-hidden="true"></span>' : ''}
+          </li>
+        `;
+      }).join('');
+
+      if (nextIdx != null) {
+        const next = MILESTONES[nextIdx];
+        const remaining = Math.max(0, next.threshold - total);
+        hint.textContent = `再完成 ${remaining} 个番茄 → 解锁「${next.emoji} ${next.name}」`;
+      } else {
+        hint.textContent = `🎉 已达到最高阶段：${MILESTONES[currentIdx].name}（累计 ${total} 番茄）`;
+      }
     }
 
     // ===== Pomodoro state machine =====
