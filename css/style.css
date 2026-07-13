@@ -22,10 +22,22 @@
       --radius-lg: 24px;
       --radius-pill: 50px;
       --stamp: #e05a5a;
+
+      /* Phase 3: heatmap green ramp. heat-0 = no data, 4 = heaviest day. */
+      --heat-0: #ebedf0;
+      --heat-1: #9be9a8;
+      --heat-2: #40c463;
+      --heat-3: #30a14e;
+      --heat-4: #216e39;
     }
 
     * {
       box-sizing: border-box;
+    }
+
+    /* `hidden` attribute must win over display: flex/grid on the element. */
+    [hidden] {
+      display: none !important;
     }
 
     body {
@@ -401,7 +413,8 @@
     .paper-sheet.is-focus-mode .back-today-btn,
     .paper-sheet.is-focus-mode #progressText,
     .paper-sheet.is-focus-mode #progressPercent,
-    .paper-sheet.is-focus-mode .progress-bar {
+    .paper-sheet.is-focus-mode .progress-bar,
+    .paper-sheet.is-focus-mode .stats-bar {
       display: none !important;
     }
     .paper-sheet.is-focus-mode .date-bar {
@@ -520,6 +533,229 @@
     }
     .focus-giveup-btn:active {
       transform: translateY(2px);
+    }
+
+    /* ===== Phase 3: stats bar (heatmap + countdown) ===== */
+    .stats-bar {
+      padding: 6px 24px 14px;
+    }
+    .stats-bar-row {
+      display: flex;
+      gap: 18px;
+      align-items: stretch;
+    }
+    .heatmap-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .heatmap-label {
+      font-size: 11px;
+      color: var(--ink-light);
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+      font-family: "Noto Sans SC", sans-serif;
+    }
+    .heatmap {
+      display: grid;
+      grid-template-columns: repeat(53, 1fr);
+      grid-template-rows: repeat(7, 11px);
+      grid-auto-flow: column;
+      gap: 2px;
+      width: 100%;
+    }
+    .heatmap-cell {
+      width: 100%;
+      height: 100%;
+      border-radius: 2px;
+      background: var(--heat-0);
+      transition: background 0.2s ease;
+    }
+    .heatmap-cell.heat-1 { background: var(--heat-1); }
+    .heatmap-cell.heat-2 { background: var(--heat-2); }
+    .heatmap-cell.heat-3 { background: var(--heat-3); }
+    .heatmap-cell.heat-4 { background: var(--heat-4); }
+    .heatmap-cell.future {
+      opacity: 0.35;
+    }
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--ink-light);
+      justify-content: flex-end;
+    }
+    .heatmap-legend .legend-cell {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    .countdown-card {
+      flex: 0 0 auto;
+      min-width: 130px;
+      max-width: 170px;
+      background: var(--primary-bg);
+      border: 2px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      box-shadow: var(--shadow-sm);
+    }
+    .countdown-label {
+      font-size: 11px;
+      color: var(--primary-active);
+      font-weight: 700;
+      letter-spacing: 1px;
+      font-family: "Noto Sans SC", sans-serif;
+    }
+    .countdown-value {
+      font-family: Nunito, sans-serif;
+      font-weight: 900;
+      font-size: 36px;
+      line-height: 1;
+      color: var(--ink);
+      margin: 2px 0 4px;
+      letter-spacing: 0;
+    }
+    .countdown-suffix {
+      font-size: 10px;
+      color: var(--ink-light);
+      font-family: "Noto Sans SC", sans-serif;
+      text-align: center;
+      line-height: 1.3;
+    }
+    .countdown-set-btn {
+      margin-top: 6px;
+      font-family: "Noto Sans SC", sans-serif;
+      font-weight: 500;
+      font-size: 11px;
+      background: #fff;
+      color: var(--primary-active);
+      border: 1.5px solid var(--primary);
+      border-radius: var(--radius-pill);
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .countdown-set-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .countdown-set-btn:active {
+      transform: translateY(1px);
+    }
+
+    /* Phase 3: gold star stamp (per-day). Distinct from per-todo .stamp. */
+    .star-stamp {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #fff8dc;
+      border: 2.5px solid var(--warning);
+      color: var(--warning);
+      font-size: 18px;
+      font-weight: 900;
+      margin-left: 8px;
+      box-shadow: 0 2px 0 0 #c79d0f;
+      animation: starPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      transform-origin: center;
+    }
+    @keyframes starPop {
+      0%   { transform: scale(0) rotate(-30deg); opacity: 0; }
+      70%  { transform: scale(1.25) rotate(15deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* Phase 3: exam-date modal */
+    .exam-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(61, 52, 40, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: focusFadeIn 0.18s ease both;
+    }
+    .exam-modal {
+      background: var(--paper);
+      border-radius: var(--radius-lg);
+      padding: 24px 26px 20px;
+      width: min(380px, 90vw);
+      box-shadow: var(--shadow-lg);
+      border: 2px solid var(--border-light);
+    }
+    .exam-modal-title {
+      font-family: "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--ink);
+      margin: 0 0 6px;
+    }
+    .exam-modal-hint {
+      font-family: "Noto Sans SC", sans-serif;
+      font-size: 12px;
+      color: var(--ink-light);
+      margin: 0 0 14px;
+    }
+    .exam-modal-input {
+      width: 100%;
+      font-family: Nunito, sans-serif;
+      font-size: 16px;
+      padding: 10px 12px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #fff;
+      color: var(--ink);
+    }
+    .exam-modal-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .exam-modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      justify-content: flex-end;
+    }
+    .exam-modal-actions button {
+      font-family: "Noto Sans SC", sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      border: 1.5px solid var(--border-light);
+      background: #fff;
+      color: var(--ink);
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .exam-modal-actions button:hover {
+      background: var(--paper-secondary);
+      transform: translateY(-1px);
+    }
+    .exam-modal-actions button:active {
+      transform: translateY(1px);
+    }
+    .exam-modal-clear {
+      margin-right: auto;
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+    .exam-modal-save {
+      background: var(--primary) !important;
+      color: #fff !important;
+      border-color: var(--primary) !important;
     }
 
     .swipe-hint {

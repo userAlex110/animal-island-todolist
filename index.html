@@ -30,6 +30,7 @@
             <h2 class="date-title">
               <span class="date-badge" id="dateBadge">2</span>
               <span id="dateText">7月2日 星期四</span>
+              <span class="star-stamp" id="starStamp" hidden aria-label="今日之星">★</span>
             </h2>
             <button class="back-today-btn" id="backTodayBtn" onclick="backToToday()">回到今天</button>
           </div>
@@ -41,6 +42,31 @@
         </div>
 
         <p class="swipe-hint">← 左右滑动翻页 →</p>
+
+        <!-- Phase 3: long-horizon stats (heatmap + exam countdown) -->
+        <section id="statsBar" class="stats-bar" aria-label="考研监督统计">
+          <div class="stats-bar-row">
+            <div class="heatmap-wrap" aria-label="番茄钟热力图（最近 371 天）">
+              <div class="heatmap-label">最近 53 周专注度</div>
+              <div id="heatmap" class="heatmap"></div>
+              <div class="heatmap-legend" aria-hidden="true">
+                <span>少</span>
+                <span class="legend-cell heat-0"></span>
+                <span class="legend-cell heat-1"></span>
+                <span class="legend-cell heat-2"></span>
+                <span class="legend-cell heat-3"></span>
+                <span class="legend-cell heat-4"></span>
+                <span>多</span>
+              </div>
+            </div>
+            <div class="countdown-card" id="countdownCard" aria-label="考日倒计时">
+              <div class="countdown-label">距离考日</div>
+              <div class="countdown-value" id="countdownValue">—</div>
+              <div class="countdown-suffix" id="countdownSuffix">点击右侧设置考日</div>
+              <button class="countdown-set-btn" id="countdownSetBtn" onclick="openExamModal()" type="button">📅 设置考日</button>
+            </div>
+          </div>
+        </section>
 
         <img class="wave-divider" src="https://raw.githubusercontent.com/guokaigdg/animal-island-ui/main/src/assets/img/dividers/wave-yellow.svg" alt="" />
 
@@ -87,6 +113,21 @@
   </div>
 
   <button class="floating-action" onclick="addTodo()" aria-label="新增待办事项">＋</button>
+
+  <!-- Phase 3: exam date modal. Opened from #countdownSetBtn. Kept inline
+       (no third-party) and minimal — one input + two buttons. -->
+  <div id="examModalBackdrop" class="exam-modal-backdrop" hidden onclick="closeExamModal(event)">
+    <div class="exam-modal" role="dialog" aria-label="设置考日" onclick="event.stopPropagation()">
+      <h3 class="exam-modal-title">📅 设置考日</h3>
+      <p class="exam-modal-hint">输入考试日期，热力图右上角会显示倒计时天数。</p>
+      <input type="date" id="examDateInput" class="exam-modal-input" />
+      <div class="exam-modal-actions">
+        <button class="exam-modal-clear" id="examModalClear" type="button">清除</button>
+        <button class="exam-modal-cancel" type="button" onclick="closeExamModal()">取消</button>
+        <button class="exam-modal-save" type="button" onclick="saveExamDate()">保存</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/app.js"></script>
 </body>
