@@ -215,6 +215,216 @@
     }
     document.getElementById('examModalClear').addEventListener('click', clearExamDate);
 
+    // ===== Phase 4: settings drawer (subjects + daily goal + import/export) =====
+    // Single source of truth lives in `v2:settings` under keys:
+    //   subjects:   ["数据结构", "英语", ...]
+    //   dailyGoal:  number, focus-session count per day to highlight
+    //   examDate:   'YYYY-MM-DD' (already used by Phase 3)
+    //
+    // The drawer is a side panel (right slide-in). Backdrop + ESC + close
+    // button all close it. Import uses Blob+anchor download; export dumps
+    // every v2-namespaced localStorage key as a single JSON file.
+
+    const DEFAULT_SUBJECTS = [];
+
+    function getSubjects() {
+      const s = getSettings();
+      return Array.isArray(s.subjects) ? s.subjects : DEFAULT_SUBJECTS.slice();
+    }
+
+    function setSubjects(list) {
+      const cleaned = Array.from(new Set(
+        (list || [])
+          .map(x => String(x).trim())
+          .filter(Boolean)
+      )).slice(0, 20);
+      saveSettings({ subjects: cleaned });
+    }
+
+    function addSubject(e) {
+      e.preventDefault();
+      const input = document.getElementById('newSubjectInput');
+      if (!input) return;
+      const v = input.value.trim();
+      if (!v) return;
+      const list = getSubjects();
+      if (list.includes(v)) { input.value = ''; return; }
+      list.push(v);
+      setSubjects(list);
+      input.value = '';
+      renderSubjectsList();
+    }
+
+    function removeSubject(name) {
+      setSubjects(getSubjects().filter(s => s !== name));
+      renderSubjectsList();
+    }
+
+    function renderSubjectsList() {
+      const ul = document.getElementById('subjectsList');
+      if (!ul) return;
+      const list = getSubjects();
+      if (!list.length) {
+        ul.innerHTML = '<li class="subjects-empty">还没有科目，添加一个开始追踪吧</li>';
+        return;
+      }
+      ul.innerHTML = list.map(s => `
+        <li class="subject-chip-row">
+          <span class="subject-chip">📘 ${escapeHtml(s)}</span>
+          <button class="subject-remove-btn" onclick="removeSubject('${s.replace(/'/g, "\\'")}')" aria-label="删除">×</button>
+        </li>
+      `).join('');
+    }
+
+    function getDailyGoal() {
+      const s = getSettings();
+      const n = parseInt(s.dailyGoal, 10);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function saveDailyGoal() {
+      const input = document.getElementById('dailyGoalInput');
+      if (!input) return;
+      const n = parseInt(input.value, 10);
+      if (!Number.isFinite(n) || n < 1) {
+        input.value = getDailyGoal() || '';
+        return;
+      }
+      saveSettings({ dailyGoal: Math.min(24, n) });
+      input.value = getDailyGoal();
+      renderGoalProgress();
+    }
+
+    function todayFocusCount() {
+      const key = STORAGE_PREFIX_V2 + 'pomodoros:' + dateKey(new Date());
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) {}
+      return list.filter(s => s && s.kind === 'focus' && s.completed).length;
+    }
+
+    function renderGoalProgress() {
+      const el = document.getElementById('goalProgress');
+      if (!el) return;
+      const goal = getDailyGoal();
+      if (!goal) { el.innerHTML = ''; return; }
+      const done = todayFocusCount();
+      const ratio = Math.min(1, done / goal);
+      const hit = done >= goal;
+      el.innerHTML = `
+        <div class="goal-progress-text ${hit ? 'goal-hit' : ''}">
+          今日已完成 <strong>${done}</strong> / 目标 ${goal} 个番茄${hit ? ' 🎉' : ''}
+        </div>
+        <div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${ratio*100}%"></div></div>
+      `;
+    }
+
+    function openSettings() {
+      const drawer = document.getElementById('settingsDrawer');
+      const backdrop = document.getElementById('settingsBackdrop');
+      const goalInput = document.getElementById('dailyGoalInput');
+      if (!drawer || !backdrop) return;
+      renderSubjectsList();
+      if (goalInput) goalInput.value = getDailyGoal() || '';
+      renderGoalProgress();
+      backdrop.hidden = false;
+      drawer.hidden = false;
+      // Force reflow so the transition runs on the freshly-unhidden element.
+      void drawer.offsetWidth;
+      drawer.classList.add('drawer-open');
+      backdrop.classList.add('drawer-open');
+    }
+
+    function closeSettings(ev) {
+      if (ev && ev.target !== ev.currentTarget) return;
+      const drawer = document.getElementById('settingsDrawer');
+      const backdrop = document.getElementById('settingsBackdrop');
+      if (!drawer || !backdrop) return;
+      drawer.classList.remove('drawer-open');
+      backdrop.classList.remove('drawer-open');
+      const finish = () => {
+        drawer.hidden = true;
+        backdrop.hidden = true;
+        drawer.removeEventListener('transitionend', finish);
+      };
+      drawer.addEventListener('transitionend', finish);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !document.getElementById('settingsDrawer')?.hidden) {
+        closeSettings();
+      }
+    });
+
+    function exportData() {
+      const dump = {
+        __app: 'animal-island-todolist:v2',
+        __exportedAt: new Date().toISOString(),
+        keys: {},
+      };
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || !k.startsWith(STORAGE_PREFIX_V2)) continue;
+          const raw = localStorage.getItem(k);
+          // Preserve stored type: rehydrate parsed values so consumers can
+          // JSON.stringify them faithfully.
+          try { dump.keys[k] = JSON.parse(raw); }
+          catch { dump.keys[k] = raw; }
+        }
+      } catch (e) {}
+      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `animal-island-${dateKey(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setIOStatus(`已导出 ${Object.keys(dump.keys).length} 个 key`);
+    }
+
+    async function importData(ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      setIOStatus('正在导入…');
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!parsed || parsed.__app !== 'animal-island-todolist:v2' || typeof parsed.keys !== 'object') {
+          setIOStatus('❌ 文件格式不对，应是 v2 导出的 JSON');
+          return;
+        }
+        let added = 0, skipped = 0;
+        for (const [k, v] of Object.entries(parsed.keys)) {
+          if (!k.startsWith(STORAGE_PREFIX_V2)) { skipped++; continue; }
+          const serialized = typeof v === 'string' ? v : JSON.stringify(v);
+          // Merge semantics: don't overwrite existing user data; user wins
+          // over imported copy. This keeps the export→import round-trip
+          // idempotent and prevents a typo'd file from wiping state.
+          if (localStorage.getItem(k) == null) {
+            localStorage.setItem(k, serialized);
+            added++;
+          } else {
+            skipped++;
+          }
+        }
+        setIOStatus(`✅ 导入 ${added} 项，跳过 ${skipped} 项已存在数据`);
+        renderSubjectsList();
+        renderGoalProgress();
+        renderStats();
+      } catch (e) {
+        setIOStatus(`❌ 解析失败：${e.message || e}`);
+      } finally {
+        ev.target.value = '';
+      }
+    }
+
+    function setIOStatus(msg) {
+      const el = document.getElementById('ioStatus');
+      if (el) el.textContent = msg;
+    }
+
     function applyStarStamp() {
       // 今日之星: today is in view, every todo is done, and at least one
       // pomodoro was completed today. Shows a gold star next to the date

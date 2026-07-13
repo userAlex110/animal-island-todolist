@@ -19,6 +19,7 @@
     <header class="header">
       <h1 class="logo">动物岛每日手记</h1>
       <p class="subtitle">一天一页 · 像撕日历一样翻过每一天</p>
+      <button class="header-gear-btn" id="openSettingsBtn" onclick="openSettings()" aria-label="设置">⚙️</button>
     </header>
 
     <div class="calendar-stand">
@@ -133,6 +134,52 @@
       </div>
     </div>
   </div>
+
+  <!-- Phase 4: settings drawer (subjects + daily goal + import/export) -->
+  <div id="settingsBackdrop" class="drawer-backdrop" hidden onclick="closeSettings(event)"></div>
+  <aside id="settingsDrawer" class="settings-drawer" hidden aria-label="设置面板" role="dialog">
+    <div class="drawer-handle" aria-hidden="true"></div>
+    <header class="drawer-header">
+      <h3 class="drawer-title">⚙️ 设置</h3>
+      <button class="drawer-close-btn" onclick="closeSettings()" aria-label="关闭">×</button>
+    </header>
+
+    <section class="drawer-section">
+      <h4 class="drawer-section-title">📚 考研科目</h4>
+      <p class="drawer-section-hint">添加要追踪的科目，分配到每条待办。</p>
+      <ul id="subjectsList" class="subjects-list"></ul>
+      <form class="subjects-add-row" onsubmit="addSubject(event)">
+        <input type="text" id="newSubjectInput" class="drawer-input" placeholder="如：数据结构" maxlength="20" />
+        <button type="submit" class="drawer-btn drawer-btn-primary">＋ 添加</button>
+      </form>
+    </section>
+
+    <section class="drawer-section">
+      <h4 class="drawer-section-title">🎯 每日专注目标</h4>
+      <p class="drawer-section-hint">每天完成的番茄钟数 ≥ 这个数会高亮今天的格子。</p>
+      <div class="goal-row">
+        <input type="number" id="dailyGoalInput" class="drawer-input" min="1" max="24" />
+        <span class="goal-suffix">个 / 天</span>
+        <button class="drawer-btn drawer-btn-primary" onclick="saveDailyGoal()">保存</button>
+      </div>
+      <div id="goalProgress" class="goal-progress"></div>
+    </section>
+
+    <section class="drawer-section">
+      <h4 class="drawer-section-title">💾 数据备份</h4>
+      <p class="drawer-section-hint">导出全部本地数据（含历史待办、番茄钟、设置）为 JSON。导入时会按日期合并、不覆盖已有数据。</p>
+      <div class="io-row">
+        <button class="drawer-btn" onclick="exportData()">📤 导出 JSON</button>
+        <label class="drawer-btn drawer-btn-primary">
+          📥 导入 JSON
+          <input type="file" id="importFileInput" accept="application/json,.json" onchange="importData(event)" hidden />
+        </label>
+      </div>
+      <p id="ioStatus" class="io-status" aria-live="polite"></p>
+    </section>
+
+    <footer class="drawer-footer">动物岛每日手记 · 本地数据 · 不上传</footer>
+  </aside>
 
   <script src="js/app.js"></script>
 </body>
